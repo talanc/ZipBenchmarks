@@ -28,7 +28,6 @@ public class ZipArchiveEntryBenchmarks
 
     private MemoryStream msRaw;
     private MemoryStream msZip;
-    private MemoryStream msZipText;
 
     [GlobalSetup]
     public void GlobalSetup()
@@ -43,19 +42,6 @@ public class ZipArchiveEntryBenchmarks
             var entry = zip.CreateEntry(i.ToString());
             using var entryStream = entry.Open();
             PerformWrite(entryStream);
-        }
-
-        msZipText = new MemoryStream();
-        using var zipText = new ZipArchive(msZipText, ZipArchiveMode.Create, true);
-        for (var i = 1; i <= F; i++)
-        {
-            var entry = zip.CreateEntry(i.ToString());
-            using var entryStream = entry.Open();
-            using var sw = new StreamWriter(entryStream, Encoding.UTF8, 0x2000, true);
-            for (var j = 1; j <= N; j++)
-            {
-                sw.WriteLine(j.ToString());
-            }
         }
     }
 
