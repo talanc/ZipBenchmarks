@@ -10,14 +10,20 @@ using System.Text;
 
 namespace ZipBenchmarks;
 
-[SimpleJob(RuntimeMoniker.Net48, launchCount: 1, warmupCount: 3, iterationCount: 3, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net80, launchCount: 1, warmupCount: 3, iterationCount: 3)]
+// Findings:
+// - net8 has a massive performance issue with reading zip archives streams directly with BinaryReader
+// - this can be fixed wrapping stream in a BufferedStream first
+// - net9 mostly fixes this issue, still not as fast as net48
+// - net9 has slightly less perf than net8 in Raw/BS tests
+// - still you should probably use BufferedStream as it uses less allocations overall
+
+[SimpleJob(RuntimeMoniker.Net48)]
+[SimpleJob(RuntimeMoniker.Net80, baseline: true)]
+[SimpleJob(RuntimeMoniker.Net90)]
 [MemoryDiagnoser]
 public class ZipArchiveEntryBenchmarks
 {
-    [Params(1)]
-    public int F { get; set; }
-
+    public const int F = 10;
     private const int N = 30_000;
 
     private MemoryStream msRaw;
@@ -74,18 +80,11 @@ public class ZipArchiveEntryBenchmarks
         }
     }
 
-    private static void InternalCopyTo(Stream source, Stream destination, byte[] array)
-    {
-        int count;
-        while ((count = source.Read(array, 0, array.Length)) != 0)
-        {
-            destination.Write(array, 0, count);
-        }
-    }
-
     // BinaryReader performance on a simple MemoryStream
     //
-    // net8 is much faster than net48
+    // net8: 7x faster than net48
+    // net8: 1.45x faster than net9
+    // net9: 3x less alloc than net8
     [Benchmark]
     public int Raw()
     {
@@ -102,7 +101,9 @@ public class ZipArchiveEntryBenchmarks
 
     // BinaryReader performance on a ZipArchiveEntry stream
     //
-    // net48 is 14x (!!!) faster than net8
+    // net9: 10x faster than net8
+    // net48: 1.5x faster than net9
+    // net9: 88x less alloc than net48
     [Benchmark]
     public int Zip()
     {
@@ -120,33 +121,11 @@ public class ZipArchiveEntryBenchmarks
         return num;
     }
 
-    // Demonstrates that the massive performance issue affects BinaryReader and not StreamReader
-    [Benchmark]
-    public int ZipText()
-    {
-        msZipText.Position = 0;
-
-        var num = 0;
-
-        using var zip = new ZipArchive(msZip, ZipArchiveMode.Read, true);
-        foreach (var entry in zip.Entries)
-        {
-            using var entryStream = entry.Open();
-            using var sr = new StreamReader(entryStream, Encoding.UTF8, false, 0x2000, true);
-            while (sr.ReadLine() != null)
-            {
-                num++;
-            }
-        }
-
-        return num;
-    }
-
     // BinaryReader performance on a ZipArchiveEntry stream,
     // Wraps entry stream in a BufferedStream
     //
-    // net8 is 2x faster than net48, no longer any massive slowdown
-    // net8 also uses 5x more memory than just Zip
+    // net8 no longer has massive perf issue from Zip()
+    // net8: 1.4x faster than net9
     [Benchmark]
     public int ZipBufferedStream()
     {
@@ -160,67 +139,6 @@ public class ZipArchiveEntryBenchmarks
             using var entryStream = entry.Open();
             using var bs = new BufferedStream(entryStream);
             num += PerformRead(bs);
-        }
-
-        return num;
-    }
-
-    // BinaryReader performance on a ZipArchiveEntry stream,
-    // Copies the contents to a local MemoryStream
-    // 
-    // net8, net48: Faster than ZipBufferedStream
-    // net8: Uses less memory than ZipBufferedStream
-    // net48: Allocates twice as much memory as ZipBufferedStream
-    [Benchmark]
-    public int ZipInnerMemoryStream()
-    {
-        msZip.Position = 0;
-
-        var num = 0;
-
-        var msEntry = new MemoryStream();
-
-        using var zip = new ZipArchive(msZip, ZipArchiveMode.Read, true);
-        foreach (var entry in zip.Entries)
-        {
-            using var entryStream = entry.Open();
-
-            msEntry.Position = 0;
-            entryStream.CopyTo(msEntry);
-            msEntry.Position = 0;
-
-            num += PerformRead(msEntry);
-        }
-
-        return num;
-    }
-
-    // BinaryReader performance on a ZipArchiveEntry stream
-    // Copies the contents to a local MemoryStream
-    // Copy uses a local buffer
-    //
-    // About as fast as ZipInnerMemoryStream
-    // Allocates half as much as ZipInnerMemoryStream
-    [Benchmark]
-    public int ZipInnerMemoryStreamAndBuffer()
-    {
-        msZip.Position = 0;
-
-        var num = 0;
-
-        var msEntry = new MemoryStream();
-        var buffer = new byte[0x2000];
-
-        using var zip = new ZipArchive(msZip, ZipArchiveMode.Read, true);
-        foreach (var entry in zip.Entries)
-        {
-            using var entryStream = entry.Open();
-
-            msEntry.Position = 0;
-            InternalCopyTo(entryStream, msEntry, buffer);
-            msEntry.Position = 0;
-
-            num += PerformRead(msEntry);
         }
 
         return num;
