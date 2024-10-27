@@ -10,13 +10,12 @@ using System.Text;
 
 namespace ZipBenchmarks;
 
-[SimpleJob(RuntimeMoniker.Net48, baseline: true)]
-[SimpleJob(RuntimeMoniker.Net70)]
-[SimpleJob(RuntimeMoniker.Net80)]
+[SimpleJob(RuntimeMoniker.Net48, launchCount: 1, warmupCount: 3, iterationCount: 3, baseline: true)]
+[SimpleJob(RuntimeMoniker.Net80, launchCount: 1, warmupCount: 3, iterationCount: 3)]
 [MemoryDiagnoser]
 public class ZipArchiveEntryBenchmarks
 {
-    [Params(1, 5, 50)]
+    [Params(1)]
     public int F { get; set; }
 
     private const int N = 30_000;
@@ -86,7 +85,7 @@ public class ZipArchiveEntryBenchmarks
 
     // BinaryReader performance on a simple MemoryStream
     //
-    // net7 is 3x faster than net48
+    // net8 is much faster than net48
     [Benchmark]
     public int Raw()
     {
@@ -103,7 +102,7 @@ public class ZipArchiveEntryBenchmarks
 
     // BinaryReader performance on a ZipArchiveEntry stream
     //
-    // net48 is 11x (!!!) faster than net7
+    // net48 is 14x (!!!) faster than net8
     [Benchmark]
     public int Zip()
     {
@@ -146,8 +145,8 @@ public class ZipArchiveEntryBenchmarks
     // BinaryReader performance on a ZipArchiveEntry stream,
     // Wraps entry stream in a BufferedStream
     //
-    // net7 is 2x faster than net48, no longer any massive slowdown
-    // net7 also uses 5x more memory than just Zip
+    // net8 is 2x faster than net48, no longer any massive slowdown
+    // net8 also uses 5x more memory than just Zip
     [Benchmark]
     public int ZipBufferedStream()
     {
@@ -169,8 +168,8 @@ public class ZipArchiveEntryBenchmarks
     // BinaryReader performance on a ZipArchiveEntry stream,
     // Copies the contents to a local MemoryStream
     // 
-    // net7, net48: Faster than ZipBufferedStream
-    // net7: Uses less memory than ZipBufferedStream
+    // net8, net48: Faster than ZipBufferedStream
+    // net8: Uses less memory than ZipBufferedStream
     // net48: Allocates twice as much memory as ZipBufferedStream
     [Benchmark]
     public int ZipInnerMemoryStream()
